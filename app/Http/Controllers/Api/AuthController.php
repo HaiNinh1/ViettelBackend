@@ -22,7 +22,8 @@ class AuthController extends Controller
 
         $user = User::where('username', $request->username)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        // Direct password comparison (no hashing)
+        if (!$user || $user->password !== $request->password) {
             throw ValidationException::withMessages([
                 'username' => ['Tên đăng nhập hoặc mật khẩu không đúng.'],
             ]);
