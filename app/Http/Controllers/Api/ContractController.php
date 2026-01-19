@@ -20,7 +20,7 @@ class ContractController extends Controller
             $query->where('employee_id', $request->employee_id);
         }
 
-        return response()->json($query->latest()->paginate(20));
+        return response()->json($query->latest()->paginate(10));
     }
 
     public function store(Request $request)

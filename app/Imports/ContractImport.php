@@ -5,12 +5,14 @@ namespace App\Imports;
 use App\Models\Contract;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Maatwebsite\Excel\Concerns\WithValidation;
 use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
 use Carbon\Carbon;
 
-class ContractImport implements ToModel, WithHeadingRow, WithValidation, SkipsEmptyRows
+class ContractImport implements ToModel, WithHeadingRow, SkipsEmptyRows
 {
+    private $rowCount = 0;
+    private $successCount = 0;
+    
     /**
      * @param array $row
      *
@@ -18,79 +20,53 @@ class ContractImport implements ToModel, WithHeadingRow, WithValidation, SkipsEm
      */
     public function model(array $row)
     {
-        // Excel headers will be converted to snake_case by Laravel Excel
-        // "Số hợp đồng" becomes "so_hop_dong"
-        // "Phân loại" becomes "phan_loai"
-        // etc.
+        $this->rowCount++;
         
-        // Debug: Log the row keys to see what we're getting
-        \Log::info('Import row keys:', array_keys($row));
-        \Log::info('Import row data:', $row);
+        // Excel headers have Vietnamese characters after snake_case conversion:
+        // số_hợp_đồng, phân_loại, ngành_nghề, tên_dự_án, ngày_ký, etc.
         
-        // Parse dates from Vietnamese format (dd/mm/yyyy) or Excel serial
-        $signingDate = $this->parseDate($row['ngay_ky'] ?? null);
-        $startDate = $this->parseDate($row['ngay_hieu_luc'] ?? null);
-        $endDate = $this->parseDate($row['ngay_ket_thuc'] ?? null);
-        $extensionDate = $this->parseDate($row['ngay_gia_han'] ?? null);
-
-        // Get contract number - try multiple possible column names
-        $contractNumber = $row['so_hop_dong'] ?? $row['so_hop'] ?? null;
+        // Get contract number - with Vietnamese column name
+        $contractNumber = $row['số_hợp_đồng'] ?? $row['so_hop_dong'] ?? null;
         
-        // Skip if contract number is empty or already exists
+        // Skip if no contract number
         if (empty($contractNumber)) {
-            \Log::warning('Skipping row - no contract number');
             return null;
         }
         
+        // Skip duplicates
         if (Contract::where('contract_number', $contractNumber)->exists()) {
-            \Log::warning('Skipping row - contract already exists: ' . $contractNumber);
             return null;
         }
+
+        $this->successCount++;
+        \Log::info("Row {$this->rowCount}: Creating contract {$contractNumber}");
 
         return new Contract([
             'contract_number' => $contractNumber,
-            'classification' => $row['phan_loai'] ?? null,
-            'industry' => $row['nganh_nghe'] ?? null,
-            'project_name' => $row['ten_du_an'] ?? null,
-            'signing_date' => $signingDate,
-            'start_date' => $startDate,
-            'end_date' => $endDate,
-            'extension_date' => $extensionDate,
-            'duration_days' => $this->parseNumber($row['thoi_gian'] ?? null),
-            'contract_content' => $row['noi_dung_hop'] ?? null,
-            'contract_value' => $this->parseNumber($row['gia_tri_hop'] ?? null),
-            'adjusted_value' => $this->parseNumber($row['gia_tri_sau'] ?? null),
-            'value_difference' => $this->parseNumber($row['chenh_lech'] ?? null),
-            'approval_status' => $row['phe_duyet'] ?? null,
+            'classification' => $row['phân_loại'] ?? $row['phan_loai'] ?? null,
+            'industry' => $row['ngành_nghề'] ?? $row['nganh_nghe'] ?? null,
+            'project_name' => $row['tên_dự_án'] ?? $row['ten_du_an'] ?? null,
+            'signing_date' => $this->parseDate($row['ngày_ký'] ?? $row['ngay_ky'] ?? null),
+            'start_date' => $this->parseDate($row['ngày_hiệu_lực'] ?? $row['ngay_hieu_luc'] ?? null),
+            'end_date' => $this->parseDate($row['ngày_kết_thúc'] ?? $row['ngay_ket_thuc'] ?? null),
+            'extension_date' => $this->parseDate($row['ngày_gia_hạn'] ?? $row['ngay_gia_han'] ?? null),
+            'duration_days' => $this->parseNumber($row['thời_gian_thực_hiện'] ?? $row['thoi_gian'] ?? null),
+            'contract_content' => $row['nội_dung_hợp_đồng'] ?? $row['noi_dung_hop'] ?? null,
+            'contract_value' => $this->parseNumber($row['giá_trị_hợp_đồng'] ?? $row['gia_tri_hop'] ?? null),
+            'adjusted_value' => $this->parseNumber($row['giá_trị_sau_thuế'] ?? $row['gia_tri_sau'] ?? null),
+            'value_difference' => $this->parseNumber($row['chênh_lệch'] ?? $row['chenh_lech'] ?? null),
+            'approval_status' => $row['phê_duyệt'] ?? $row['phe_duyet'] ?? null,
             'status' => 'active',
-            'contract_status' => $row['trang_thai'] ?? null,
-            'condition_status' => $row['tinh_trang'] ?? null,
-            'investor' => $row['chu_dau_tu'] ?? null,
-            'legal_entity' => $row['phap_nhan'] ?? null,
-            'advance_payment' => $row['tam_ung'] ?? null,
-            'notes' => $row['ghi_chu'] ?? null,
-            'appendix_number' => $row['so_phu_luc'] ?? null,
-            'revision_count' => $this->parseNumber($row['so_lan'] ?? 0),
-            'extension_count' => $this->parseNumber($row['so_lan_gia'] ?? 0),
+            'contract_status' => $row['trạng_thái'] ?? $row['trang_thai'] ?? null,
+            'condition_status' => $row['tình_trạng'] ?? $row['tinh_trang'] ?? null,
+            'investor' => $row['chủ_đầu_tư'] ?? $row['chu_dau_tu'] ?? null,
+            'legal_entity' => $row['pháp_nhân'] ?? $row['phap_nhan'] ?? null,
+            'advance_payment' => $row['tạm_ứng'] ?? $row['tam_ung'] ?? null,
+            'notes' => $row['ghi_chú_tạm_ứng'] ?? $row['ghi_chu'] ?? null,
+            'appendix_number' => $row['số_phụ_lục'] ?? $row['so_phu_luc'] ?? null,
+            'revision_count' => $this->parseNumber($row['số_lần_thanh_toán'] ?? $row['so_lan'] ?? 0),
+            'extension_count' => $this->parseNumber($row['số_lần_gia_hạn'] ?? $row['so_lan_gia'] ?? 0),
         ]);
-    }
-
-    /**
-     * Validation rules
-     */
-    public function rules(): array
-    {
-        return [
-            // Make validation optional since we handle it in model()
-        ];
-    }
-
-    /**
-     * Custom validation messages
-     */
-    public function customValidationMessages()
-    {
-        return [];
     }
 
     /**
@@ -98,11 +74,11 @@ class ContractImport implements ToModel, WithHeadingRow, WithValidation, SkipsEm
      */
     public function headingRow(): int
     {
-        return 2; // Headers are on row 2 (after the title row)
+        return 5; // Headers are on row 5
     }
 
     /**
-     * Parse Vietnamese date format (dd/mm/yyyy) to Carbon
+     * Parse date from Excel serial or Vietnamese format
      */
     private function parseDate($date)
     {
@@ -111,38 +87,40 @@ class ContractImport implements ToModel, WithHeadingRow, WithValidation, SkipsEm
         }
 
         try {
-            // Handle dd/mm/yyyy format
-            if (is_string($date) && strpos($date, '/') !== false) {
-                return Carbon::createFromFormat('d/m/Y', $date);
-            }
-            
             // Handle Excel date serial number
             if (is_numeric($date)) {
                 return Carbon::instance(\PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($date));
             }
+            
+            // Handle dd/mm/yyyy format
+            if (is_string($date) && strpos($date, '/') !== false) {
+                return Carbon::createFromFormat('d/m/Y', $date);
+            }
 
             return Carbon::parse($date);
         } catch (\Exception $e) {
-            \Log::error('Date parse error: ' . $e->getMessage() . ' for value: ' . $date);
             return null;
         }
     }
 
     /**
-     * Parse number with comma separator
+     * Parse number with various formats
      */
     private function parseNumber($value)
     {
-        if (empty($value)) {
+        if (empty($value) || $value === '-') {
             return null;
         }
 
-        // Handle string numbers with commas or dots
-        if (is_string($value)) {
-            // Remove thousand separators (commas, dots, spaces)
-            $value = str_replace([',', '.', ' '], '', $value);
+        if (is_numeric($value)) {
+            return (float) $value;
         }
 
-        return is_numeric($value) ? (float) $value : null;
+        if (is_string($value)) {
+            $cleaned = preg_replace('/[^\d.-]/', '', $value);
+            return is_numeric($cleaned) ? (float) $cleaned : null;
+        }
+
+        return null;
     }
 }
