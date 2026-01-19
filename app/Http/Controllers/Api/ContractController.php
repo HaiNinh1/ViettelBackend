@@ -90,9 +90,23 @@ class ContractController extends Controller
      */
     public function import(Request $request)
     {
+        // Validate file with more permissive MIME types
         $validator = Validator::make($request->all(), [
-            'file' => 'required|mimes:xlsx,xls,csv|max:10240', // Max 10MB
+            'file' => 'required|file|max:20480', // Max 20MB
         ]);
+
+        // Additional manual validation for file extension
+        if ($request->hasFile('file')) {
+            $file = $request->file('file');
+            $extension = strtolower($file->getClientOriginalExtension());
+            
+            if (!in_array($extension, ['xlsx', 'xls', 'csv'])) {
+                return response()->json([
+                    'message' => 'File phải có định dạng: xlsx, xls, hoặc csv',
+                    'errors' => ['file' => ['Invalid file extension']]
+                ], 422);
+            }
+        }
 
         if ($validator->fails()) {
             return response()->json([
