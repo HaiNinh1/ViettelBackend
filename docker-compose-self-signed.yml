@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: qlnhansu_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: qlnhansu
+      MYSQL_ROOT_PASSWORD: root_password_123
+      MYSQL_USER: qlnhansu_user
+      MYSQL_PASSWORD: qlnhansu_pass_123
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - qlnhansu_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Laravel Backend with PHP-FPM
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qlnhansu_app
+    restart: unless-stopped
+    working_dir: /var/www
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: qlnhansu
+      DB_USERNAME: qlnhansu_user
+      DB_PASSWORD: qlnhansu_pass_123
+      APP_ENV: production
+      APP_DEBUG: false
+      APP_KEY: base64:qOmdjcufF6TiEFtVmgWqMmdCqSdxwCDB3fmbzNa5beE=
+      APP_URL: https://54.206.62.10
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./storage:/var/www/storage
+      - ./bootstrap/cache:/var/www/bootstrap/cache
+    networks:
+      - qlnhansu_network
+
+  # Nginx Web Server with Self-Signed SSL
+  nginx:
+    image: nginx:alpine
+    container_name: qlnhansu_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./public:/var/www/public
+      - ./nginx-self-signed.conf:/etc/nginx/conf.d/default.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - app
+    networks:
+      - qlnhansu_network
+
+  # Migration runner (runs once then exits)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qlnhansu_migrate
+    working_dir: /var/www
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: qlnhansu
+      DB_USERNAME: qlnhansu_user
+      DB_PASSWORD: qlnhansu_pass_123
+      APP_ENV: production
+      APP_KEY: base64:qOmdjcufF6TiEFtVmgWqMmdCqSdxwCDB3fmbzNa5beE=
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - qlnhansu_network
+    command: >
+      sh -c "
+        php artisan config:cache &&
+        php artisan route:cache &&
+        php artisan migrate:fresh --seed --force
+      "
+
+networks:
+  qlnhansu_network:
+    driver: bridge
+
+volumes:
+  db_data:
+    driver: local
