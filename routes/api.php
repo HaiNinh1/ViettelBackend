@@ -24,7 +24,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Employees
     Route::apiResource('employees', EmployeeController::class);
 
-    // Contracts
+    // Contracts - Export/Import must be before resource routes
+    Route::get('contracts/export/excel', [ContractController::class, 'export']);
+    Route::post('contracts/import/excel', [ContractController::class, 'import']);
     Route::apiResource('contracts', ContractController::class);
 
     // Projects
