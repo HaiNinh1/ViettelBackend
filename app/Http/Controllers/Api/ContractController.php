@@ -116,10 +116,23 @@ class ContractController extends Controller
         }
 
         try {
-            Excel::import(new ContractImport, $request->file('file'));
+            $import = new ContractImport;
+            Excel::import($import, $request->file('file'));
+            
+            $stats = [
+                'total_rows' => $import->getRowCount(),
+                'imported' => $import->getSuccessCount(),
+                'skipped' => $import->getSkippedCount(),
+            ];
+            
+            $message = "Import hoàn tất: {$stats['imported']} hợp đồng mới";
+            if ($stats['skipped'] > 0) {
+                $message .= ", {$stats['skipped']} bị bỏ qua (trùng số hợp đồng)";
+            }
             
             return response()->json([
-                'message' => 'Contracts imported successfully'
+                'message' => $message,
+                'statistics' => $stats
             ], 200);
         } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {
             $failures = $e->failures();

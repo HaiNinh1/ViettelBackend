@@ -12,6 +12,7 @@ class ContractImport implements ToModel, WithHeadingRow, SkipsEmptyRows
 {
     private $rowCount = 0;
     private $successCount = 0;
+    private $skippedCount = 0;
     
     /**
      * @param array $row
@@ -35,8 +36,11 @@ class ContractImport implements ToModel, WithHeadingRow, SkipsEmptyRows
             return null;
         }
         
-        // Skip duplicates
-        if (Contract::where('contract_number', $contractNumber)->exists()) {
+        // Skip duplicates - check if contract number already exists
+        $existingContract = Contract::where('contract_number', $contractNumber)->first();
+        if ($existingContract) {
+            $this->skippedCount++;
+            \Log::info("Import: Skipping duplicate contract number '{$contractNumber}' (existing ID: {$existingContract->id})");
             return null;
         }
 
@@ -123,5 +127,23 @@ class ContractImport implements ToModel, WithHeadingRow, SkipsEmptyRows
         }
 
         return null;
+    }
+
+    /**
+     * Get import statistics
+     */
+    public function getRowCount(): int
+    {
+        return $this->rowCount;
+    }
+
+    public function getSuccessCount(): int
+    {
+        return $this->successCount;
+    }
+
+    public function getSkippedCount(): int
+    {
+        return $this->skippedCount;
     }
 }
